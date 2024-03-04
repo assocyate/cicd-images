@@ -40,6 +40,13 @@ jobs:
           registry: ${{ env.REGISTRY }}
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      # Extract metadata (tags, labels) for Docker
+      # https://github.com/docker/metadata-action
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@v4.4.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}          
           
       - name: Configure AWS Credentials
         uses: aws-actions/configure-aws-credentials@v2
@@ -56,8 +63,8 @@ jobs:
         id: push
         run: |
           docker pull ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main
-          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
-          docker push ${{ secrets.AWS_ACCOUNT_NUMBER }}.dkr.ecr.${{ vars.AWS_REGION }}.amazonaws.com/${{ github.event.repository.name }}
+          docker tag ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:main 112697660171.dkr.ecr.us-west-2.amazonaws.com/cicd-images
+          docker push 112697660171.dkr.ecr.us-west-2.amazonaws.com/cicd-images
 
       - name: Deploy production with aws CLI
         if: ${{ inputs.environment }} == 'Production'
