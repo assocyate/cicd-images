@@ -7,6 +7,7 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: ${{ github.repository }}
+  COSIGN_EXPERIMENTAL: "true"  # Moved to global env
 
 jobs:
   build:
@@ -14,7 +15,7 @@ jobs:
     permissions:
       contents: read
       packages: write
-      id-token: write
+      id-token: write  # Critical for keyless signing
 
     steps:
       - name: Checkout repository
@@ -55,24 +56,23 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
-      - name: Initialize cosign
+      - name: Verify image accessibility
         if: ${{ github.event_name != 'pull_request' }}
         run: |
-          rm -rf ~/.sigstore
-          cosign initialize
+          echo "Image digest: ${{ steps.build-and-push.outputs.digest }}"
+          crane manifest ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
 
-      - name: Sign the published Docker image
+      - name: Sign the image (Keyless)
         if: ${{ github.event_name != 'pull_request' }}
         env:
           COSIGN_EXPERIMENTAL: "true"
         run: |
-          # First verify the image exists and is accessible
-          echo "Verifying image exists..."
-          cosign verify ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} || true
+          # Clean any previous sigstore state
+          rm -rf ~/.sigstore
           
-          echo "Signing image..."
+          # Sign using explicit digest reference
           cosign sign \
-            --force \
             --yes \
             --rekor-url=https://rekor.sigstore.dev \
-            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}@${{ steps.build-and-push.outputs.digest }}
+            --oidc-issuer=https://token.actions.githubusercontent.com \
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@${{ steps.build-and-push.outputs.digest }}
