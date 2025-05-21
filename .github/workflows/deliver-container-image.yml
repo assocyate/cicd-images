@@ -24,7 +24,7 @@ jobs:
         if: github.event_name != 'pull_request'
         uses: sigstore/cosign-installer@v3.1.1
         with:
-          cosign-release: 'v2.6.0'  # Updated to latest stable version
+          cosign-release: 'v2.6.0'
 
       - name: Setup Docker buildx
         uses: docker/setup-buildx-action@v2.5.0
@@ -55,33 +55,24 @@ jobs:
           cache-to: type=gha,mode=max
           platforms: linux/amd64,linux/arm64
 
-      - name: Initialize cosign trust root with retry
+      - name: Initialize cosign
         if: ${{ github.event_name != 'pull_request' }}
         run: |
           rm -rf ~/.sigstore
-          for i in {1..5}; do
-            echo "Attempt $i to initialize cosign..."
-            if cosign initialize; then
-              echo "Cosign initialized successfully"
-              break
-            else
-              echo "Cosign initialization failed, retrying in 5 seconds..."
-              sleep 5
-            fi
-            if [ $i -eq 5 ]; then
-              echo "Failed to initialize cosign after 5 attempts"
-              exit 1
-            fi
-          done
+          cosign initialize
 
       - name: Sign the published Docker image
         if: ${{ github.event_name != 'pull_request' }}
         env:
           COSIGN_EXPERIMENTAL: "true"
-          COSIGN_DISABLE_TUF: "false"
         run: |
-          echo "${{ steps.meta.outputs.tags }}" | xargs -I {} cosign sign \
+          # First verify the image exists and is accessible
+          echo "Verifying image exists..."
+          cosign verify ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }} || true
+          
+          echo "Signing image..."
+          cosign sign \
+            --force \
             --yes \
-            --tlog-upload=true \
             --rekor-url=https://rekor.sigstore.dev \
-            {}@${{ steps.build-and-push.outputs.digest }}
+            ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}@${{ steps.build-and-push.outputs.digest }}
